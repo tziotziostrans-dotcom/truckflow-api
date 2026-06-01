@@ -7,13 +7,25 @@ const { t } = require('../utils/i18n');
 
 // Initialize Firebase Admin
 try {
-  const serviceAccount = require('../config/firebase-service-account.json');
+  let credential;
+  
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    // Parse the credentials from environment variable
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    credential = admin.credential.cert(serviceAccount);
+  } else {
+    // Fallback to local file for development
+    const serviceAccount = require('../config/firebase-service-account.json');
+    credential = admin.credential.cert(serviceAccount);
+  }
+
   admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
+    credential
   });
   console.log('✅ Firebase Admin initialized successfully');
 } catch (error) {
-  console.warn('⚠️ Firebase Admin could not be initialized. Push notifications will be skipped until config is provided.');
+  console.warn('⚠️ Firebase Admin could not be initialized:', error.message);
+  console.warn('⚠️ Push notifications will be skipped until configuration is provided.');
 }
 
 /**
