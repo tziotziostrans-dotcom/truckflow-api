@@ -157,7 +157,7 @@ exports.createLoad = async (req, res) => {
             console.error('Error sending notification:', notifError);
         }
 
-        // Emit real-time load_update to all broadcast/assigned drivers
+        // Emit real-time load_update to all broadcast/assigned drivers and the manager
         try {
             const { getIO } = require('../config/socket');
             const io = getIO();
@@ -167,6 +167,11 @@ exports.createLoad = async (req, res) => {
                     load: populatedLoad,
                 });
             }
+            // Emit to creator manager
+            io.to(`user:${populatedLoad.createdBy._id.toString()}`).emit('load_update', {
+                action: 'new',
+                load: populatedLoad,
+            });
         } catch (socketErr) {
             console.error('Socket emit error:', socketErr);
         }
@@ -447,10 +452,6 @@ exports.updateLoad = async (req, res) => {
                 // 1. Notify new/current drivers
                 for (const did of effectiveDriverIds) {
                     await notificationService.notifyDriverLoadAssigned(did, updatedLoad);
-                    io.to(`user:${did}`).emit('load_update', {
-                        action: 'updated',
-                        load: updatedLoad,
-                    });
                 }
 
                 // 2. Cleanup notifications for REMOVED drivers
@@ -483,6 +484,32 @@ exports.updateLoad = async (req, res) => {
             } catch (notifErr) {
                 console.error('Error sending update notifications:', notifErr);
             }
+        }
+
+        // Emit real-time load_update to creator manager and current drivers
+        try {
+            const { getIO } = require('../config/socket');
+            const io = getIO();
+            
+            // Emit to creator manager
+            io.to(`user:${updatedLoad.createdBy._id.toString()}`).emit('load_update', {
+                action: 'updated',
+                load: updatedLoad,
+            });
+
+            // Emit to current assigned/broadcast drivers
+            const currentDriverIds = updatedLoad.broadcastTo.length > 0 
+              ? updatedLoad.broadcastTo.map(d => d._id.toString()) 
+              : (updatedLoad.assignedDriver ? [updatedLoad.assignedDriver._id.toString()] : []);
+
+            for (const did of currentDriverIds) {
+                io.to(`user:${did}`).emit('load_update', {
+                    action: 'updated',
+                    load: updatedLoad,
+                });
+            }
+        } catch (socketErr) {
+            console.error('Socket emit error in updateLoad:', socketErr);
         }
 
         res.status(200).json({
@@ -520,7 +547,7 @@ exports.deleteLoad = async (req, res) => {
 
         await load.deleteOne();
 
-        // Emit WebSocket events to remove this load from drivers
+        // Emit WebSocket events to remove this load from drivers and manager
         try {
             const { getIO } = require('../config/socket');
             const io = getIO();
@@ -530,6 +557,12 @@ exports.deleteLoad = async (req, res) => {
             for (const did of recipients) {
                 io.to(`user:${did}`).emit('load_update', {
                     action: 'accepted_by_other', // REUSE this action as it triggers removal on frontend
+                    loadId: loadId,
+                });
+            }
+            if (load.createdBy) {
+                io.to(`user:${load.createdBy.toString()}`).emit('load_update', {
+                    action: 'accepted_by_other',
                     loadId: loadId,
                 });
             }
@@ -607,6 +640,12 @@ exports.assignDriver = async (req, res) => {
             const io = getIO();
             io.to(`user:${driverId}`).emit('load_update', {
                 action: 'new',
+                load: updatedLoad,
+            });
+
+            // Emit real-time load_update for creator manager
+            io.to(`user:${updatedLoad.createdBy._id.toString()}`).emit('load_update', {
+                action: 'updated',
                 load: updatedLoad,
             });
 
@@ -756,6 +795,18 @@ exports.acceptLoad = async (req, res) => {
                     }
                 }
             }
+
+            // Emit to manager
+            io.to(`user:${load.createdBy._id.toString()}`).emit('load_update', {
+                action: 'updated',
+                load,
+            });
+
+            // Emit to accepting driver
+            io.to(`user:${driverId}`).emit('load_update', {
+                action: 'updated',
+                load,
+            });
         } catch (socketErr) {
             console.error('Socket emit error:', socketErr);
         }
@@ -851,6 +902,18 @@ exports.declineLoad = async (req, res) => {
                     notificationIds: deletedNotifs.map(n => n._id.toString()),
                 });
             }
+
+            // Emit update to creator manager
+            io.to(`user:${load.createdBy._id.toString()}`).emit('load_update', {
+                action: 'updated',
+                load,
+            });
+
+            // Emit to declining driver to remove load from dashboard
+            io.to(`user:${driverId}`).emit('load_update', {
+                action: 'accepted_by_other',
+                loadId: load._id.toString(),
+            });
         } catch (cleanupErr) {
             console.error('Error cleaning up rejected load notification:', cleanupErr);
         }
@@ -924,6 +987,26 @@ exports.startLoad = async (req, res) => {
             );
         } catch (notifError) {
             console.error('Error sending notification:', notifError);
+        }
+
+        // Emit real-time load_update to creator manager and driver
+        try {
+            const { getIO } = require('../config/socket');
+            const io = getIO();
+            
+            // Emit to creator manager
+            io.to(`user:${load.createdBy._id.toString()}`).emit('load_update', {
+                action: 'updated',
+                load,
+            });
+
+            // Emit to driver
+            io.to(`user:${load.assignedDriver._id.toString()}`).emit('load_update', {
+                action: 'updated',
+                load,
+            });
+        } catch (socketErr) {
+            console.error('Socket emit error in startLoad:', socketErr);
         }
 
         res.status(200).json({
@@ -1012,6 +1095,26 @@ exports.uploadPOD = async (req, res) => {
             );
         } catch (notifError) {
             console.error('Error sending notification:', notifError);
+        }
+
+        // Emit real-time load_update to creator manager and driver
+        try {
+            const { getIO } = require('../config/socket');
+            const io = getIO();
+            
+            // Emit to creator manager
+            io.to(`user:${load.createdBy._id.toString()}`).emit('load_update', {
+                action: 'updated',
+                load,
+            });
+
+            // Emit to driver
+            io.to(`user:${load.assignedDriver._id.toString()}`).emit('load_update', {
+                action: 'updated',
+                load,
+            });
+        } catch (socketErr) {
+            console.error('Socket emit error in uploadPOD:', socketErr);
         }
 
         res.status(200).json({
@@ -1112,6 +1215,26 @@ exports.uploadDocuments = async (req, res) => {
             console.log('✅ Notification sent to manager');
         } catch (notifError) {
             console.error('⚠️ Error sending notification:', notifError);
+        }
+
+        // Emit real-time load_update to creator manager and driver
+        try {
+            const { getIO } = require('../config/socket');
+            const io = getIO();
+            
+            // Emit to creator manager
+            io.to(`user:${load.createdBy._id.toString()}`).emit('load_update', {
+                action: 'updated',
+                load,
+            });
+
+            // Emit to driver
+            io.to(`user:${load.assignedDriver._id.toString()}`).emit('load_update', {
+                action: 'updated',
+                load,
+            });
+        } catch (socketErr) {
+            console.error('Socket emit error in uploadDocuments:', socketErr);
         }
 
         console.log('✅ Sending success response');

@@ -106,7 +106,7 @@ const createRoute = async (req, res) => {
             .populate('broadcastTo', 'name email phone')
             .populate('loads');
 
-        // Notify + WebSocket to all drivers
+        // Notify + WebSocket to all drivers and creator manager
         try {
             const { getIO } = require('../config/socket');
             const io = getIO();
@@ -114,6 +114,8 @@ const createRoute = async (req, res) => {
                 await notificationService.notifyDriverRouteAssigned(did, populatedRoute);
                 io.to(`user:${did}`).emit('route_update', { action: 'new', route: populatedRoute });
             }
+            // Emit to creator manager
+            io.to(`user:${populatedRoute.createdBy._id.toString()}`).emit('route_update', { action: 'new', route: populatedRoute });
         } catch (notifError) {
             console.error('Error sending notifications:', notifError);
         }
@@ -290,6 +292,18 @@ const updateRoute = async (req, res) => {
             .populate('assignedDriver', 'name email phone')
             .populate('loads');
 
+        // Emit real-time route_update to creator manager and assigned driver
+        try {
+            const { getIO } = require('../config/socket');
+            const io = getIO();
+            io.to(`user:${updatedRoute.createdBy._id.toString()}`).emit('route_update', { action: 'updated', route: updatedRoute });
+            if (updatedRoute.assignedDriver) {
+                io.to(`user:${updatedRoute.assignedDriver._id.toString()}`).emit('route_update', { action: 'updated', route: updatedRoute });
+            }
+        } catch (socketErr) {
+            console.error('Socket emit error in updateRoute:', socketErr);
+        }
+
         res.status(200).json({
             success: true,
             message: 'Route updated successfully',
@@ -332,11 +346,17 @@ const deleteRoute = async (req, res) => {
 
         await route.deleteOne();
 
-        // Notify affected drivers via WebSocket and clean up their notifications
+        // Notify affected drivers + manager via WebSocket and clean up their notifications
         try {
             const { getIO } = require('../config/socket');
             const io = getIO();
             const Notification = require('../models/Notification');
+
+            // Notify manager: route deleted
+            const managerId = route.createdBy ? route.createdBy.toString() : null;
+            if (managerId) {
+                io.to(`user:${managerId}`).emit('route_update', { action: 'deleted', routeId });
+            }
 
             const recipients = new Set(previousBroadcastTo);
             if (previousAssignedDriver) recipients.add(previousAssignedDriver);
@@ -423,6 +443,18 @@ const addLoadsToRoute = async (req, res) => {
             .populate('assignedDriver', 'name email phone')
             .populate('loads');
 
+        // Emit real-time update to manager and driver
+        try {
+            const { getIO } = require('../config/socket');
+            const io = getIO();
+            io.to(`user:${updatedRoute.createdBy._id.toString()}`).emit('route_update', { action: 'updated', route: updatedRoute });
+            if (updatedRoute.assignedDriver) {
+                io.to(`user:${updatedRoute.assignedDriver._id.toString()}`).emit('route_update', { action: 'updated', route: updatedRoute });
+            }
+        } catch (socketErr) {
+            console.error('Socket emit error in addLoadsToRoute:', socketErr);
+        }
+
         res.status(200).json({
             success: true,
             message: 'Loads added to route successfully',
@@ -473,6 +505,18 @@ const removeLoadFromRoute = async (req, res) => {
             .populate('createdBy', 'name email')
             .populate('assignedDriver', 'name email phone')
             .populate('loads');
+
+        // Emit real-time update to manager and driver
+        try {
+            const { getIO } = require('../config/socket');
+            const io = getIO();
+            io.to(`user:${updatedRoute.createdBy._id.toString()}`).emit('route_update', { action: 'updated', route: updatedRoute });
+            if (updatedRoute.assignedDriver) {
+                io.to(`user:${updatedRoute.assignedDriver._id.toString()}`).emit('route_update', { action: 'updated', route: updatedRoute });
+            }
+        } catch (socketErr) {
+            console.error('Socket emit error in removeLoadFromRoute:', socketErr);
+        }
 
         res.status(200).json({
             success: true,
@@ -571,6 +615,8 @@ const acceptRoute = async (req, res) => {
                     }
                 }
             }
+            // Also notify the manager that the route was accepted
+            io.to(`user:${route.createdBy._id.toString()}`).emit('route_update', { action: 'updated', route });
         } catch (socketErr) {
             console.error('Socket emit error:', socketErr);
         }
@@ -653,6 +699,8 @@ const rejectRoute = async (req, res) => {
                     notificationIds: deletedNotifs.map(n => n._id.toString()),
                 });
             }
+            // Notify manager of the rejection
+            io.to(`user:${route.createdBy._id.toString()}`).emit('route_update', { action: 'updated', route });
         } catch (cleanupErr) {
             console.error('Error cleaning up rejected route notification:', cleanupErr);
         }
@@ -688,6 +736,15 @@ const startRoute = async (req, res) => {
         await route.populate('createdBy', 'name email');
         await route.populate('assignedDriver', 'name email phone');
         await route.populate('loads');
+
+        // Emit real-time update to manager
+        try {
+            const { getIO } = require('../config/socket');
+            const io = getIO();
+            io.to(`user:${route.createdBy._id.toString()}`).emit('route_update', { action: 'updated', route });
+        } catch (socketErr) {
+            console.error('Socket emit error in startRoute:', socketErr);
+        }
 
         res.status(200).json({ success: true, message: 'Route started', route });
     } catch (err) {
@@ -729,6 +786,15 @@ const completeRoute = async (req, res) => {
 
         await route.populate('createdBy', 'name email');
         await route.populate('assignedDriver', 'name email phone');
+
+        // Emit real-time update to manager
+        try {
+            const { getIO } = require('../config/socket');
+            const io = getIO();
+            io.to(`user:${route.createdBy._id.toString()}`).emit('route_update', { action: 'updated', route });
+        } catch (socketErr) {
+            console.error('Socket emit error in completeRoute:', socketErr);
+        }
 
         res.status(200).json({ success: true, message: 'Route completed', route });
     } catch (err) {
@@ -772,7 +838,18 @@ const startRouteLoad = async (req, res) => {
         await load.save();
 
         // Re-populate the route
+        await route.populate('createdBy', 'name email');
         await route.populate('loads');
+
+        // Emit real-time update to manager
+        try {
+            const { getIO } = require('../config/socket');
+            const io = getIO();
+            io.to(`user:${route.createdBy._id.toString()}`).emit('route_update', { action: 'updated', route });
+            io.to(`user:${route.createdBy._id.toString()}`).emit('load_update', { action: 'updated', load });
+        } catch (socketErr) {
+            console.error('Socket emit error in startRouteLoad:', socketErr);
+        }
 
         res.status(200).json({ success: true, message: 'Load started', load, route });
     } catch (err) {
@@ -812,10 +889,21 @@ const completeRouteLoad = async (req, res) => {
         await load.save();
 
         // Re-populate the route
+        await route.populate('createdBy', 'name email');
         await route.populate('loads');
 
         // Check if all loads are now completed
         const allCompleted = route.loads.every(l => l.status === 'completed');
+
+        // Emit real-time update to manager
+        try {
+            const { getIO } = require('../config/socket');
+            const io = getIO();
+            io.to(`user:${route.createdBy._id.toString()}`).emit('route_update', { action: 'updated', route });
+            io.to(`user:${route.createdBy._id.toString()}`).emit('load_update', { action: 'updated', load });
+        } catch (socketErr) {
+            console.error('Socket emit error in completeRouteLoad:', socketErr);
+        }
 
         res.status(200).json({
             success: true,
@@ -890,6 +978,15 @@ const uploadDocuments = async (req, res) => {
             );
         } catch (notifError) {
             console.error('Error sending notification:', notifError);
+        }
+
+        // Emit real-time update to manager
+        try {
+            const { getIO } = require('../config/socket');
+            const io = getIO();
+            io.to(`user:${route.createdBy._id.toString()}`).emit('route_update', { action: 'updated', route });
+        } catch (socketErr) {
+            console.error('Socket emit error in uploadDocuments:', socketErr);
         }
 
         res.status(200).json({
