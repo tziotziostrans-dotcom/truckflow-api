@@ -4,13 +4,21 @@ const jwt = require('jsonwebtoken');
 let io;
 const userSockets = new Map(); // Map userId to socket IDs
 
+const getAllowedOrigins = () =>
+  [
+    process.env.FRONTEND_URL,
+    'http://localhost:3000',
+    'https://truckflowhq.com',
+    'https://www.truckflowhq.com',
+  ].filter(Boolean);
+
 const initializeSocket = (server) => {
   io = socketIO(server, {
     cors: {
-      origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+      origin: getAllowedOrigins(),
       methods: ['GET', 'POST'],
-      credentials: true
-    }
+      credentials: true,
+    },
   });
 
   // Authentication middleware
