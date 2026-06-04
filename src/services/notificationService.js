@@ -69,10 +69,27 @@ try {
  */
 const sendPushToUser = async (userId, payload) => {
   try {
-    if (!admin.apps.length) return
+    if (!admin.apps.length) {
+      console.warn(
+        'FCM push skipped because Firebase Admin is not initialized:',
+        userId,
+      )
+      return
+    }
 
     const user = await User.findById(userId)
-    if (!user || !user.fcmTokens || user.fcmTokens.length === 0) return
+    if (!user) {
+      console.warn('FCM push skipped because user was not found:', userId)
+      return
+    }
+    if (!user.fcmTokens || user.fcmTokens.length === 0) {
+      console.warn('FCM push skipped because user has no tokens:', userId)
+      return
+    }
+
+    console.log(
+      `FCM push: sending to ${user.fcmTokens.length} token(s) for user ${userId}`,
+    )
 
     const message = {
       notification: {
