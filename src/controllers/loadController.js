@@ -879,6 +879,19 @@ exports.declineLoad = async (req, res) => {
         await load.populate('createdBy', 'name email');
         await load.populate('assignedDriver', 'name email phone');
 
+        // Notify manager if load moved to 'rejected'
+        try {
+            if (load.status === 'rejected') {
+                await notificationService.notifyManagerLoadRejected(
+                    load.createdBy._id,
+                    load,
+                    req.user.name
+                );
+            }
+        } catch (notifErr) {
+            console.error('Error sending rejection notification to manager:', notifErr);
+        }
+
         // Clean up the driver's own notification for this load since they actioned it
         try {
             const Notification = require('../models/Notification');
