@@ -10,12 +10,27 @@ try {
   let credential;
   
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    // Parse the credentials from environment variable
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-    if (serviceAccount.private_key) {
-      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    try {
+      // Parse the credentials from environment variable
+      let serviceAccountStr = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
+      // Remove wrapping single quotes if present
+      if (serviceAccountStr.startsWith("'") && serviceAccountStr.endsWith("'")) {
+        serviceAccountStr = serviceAccountStr.slice(1, -1);
+      }
+      // Remove wrapping double quotes if present
+      if (serviceAccountStr.startsWith('"') && serviceAccountStr.endsWith('"')) {
+        serviceAccountStr = serviceAccountStr.slice(1, -1);
+      }
+      
+      const serviceAccount = JSON.parse(serviceAccountStr);
+      if (serviceAccount.private_key) {
+        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+      }
+      credential = admin.credential.cert(serviceAccount);
+    } catch (parseError) {
+      console.error('❌ Failed to parse FIREBASE_SERVICE_ACCOUNT env variable:', parseError.message);
+      throw parseError;
     }
-    credential = admin.credential.cert(serviceAccount);
   } else {
     // Fallback to local file for development
     const serviceAccount = require('../config/firebase-service-account.json');
