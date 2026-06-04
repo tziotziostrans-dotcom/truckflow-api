@@ -17,6 +17,29 @@ dotenv.config();
 // Connect to database
 connectDB();
 
+// Verify SMTP at startup
+setTimeout(async () => {
+    try {
+        const nodemailer = require('nodemailer');
+        const transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST || 'smtp.gmail.com',
+            port: parseInt(process.env.SMTP_PORT) || 587,
+            secure: false,
+            auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+            tls: { rejectUnauthorized: false },
+            connectionTimeout: 10000,
+        });
+        await transporter.verify();
+        console.log(`✅ SMTP ready — sending from: ${process.env.SMTP_USER}`);
+    } catch (err) {
+        console.error(`❌ SMTP FAILED — emails will NOT be sent!`);
+        console.error(`   Error: ${err.message}`);
+        console.error(`   SMTP_USER: ${process.env.SMTP_USER}`);
+        console.error(`   SMTP_HOST: ${process.env.SMTP_HOST}`);
+        console.error(`   SMTP_PASS set: ${!!process.env.SMTP_PASS}`);
+    }
+}, 3000); // wait 3s for server to settle
+
 const app = express();
 const server = http.createServer(app);
 
