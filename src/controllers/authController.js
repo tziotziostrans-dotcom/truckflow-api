@@ -95,6 +95,7 @@ exports.getMe = async (req, res) => {
                 role: user.role,
                 preferredLanguage: user.preferredLanguage,
                 createdAt: user.createdAt,
+                fcmTokens: user.fcmTokens || [], // ADDED: Return FCM tokens
             },
         });
     } catch (err) {
@@ -431,6 +432,41 @@ exports.updateFcmToken = async (req, res) => {
         });
     } catch (err) {
         console.error('❌ Update FCM Token Error:', err);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error', 
+            error: err.message 
+        });
+    }
+};
+
+// @desc    Clear all FCM tokens (useful for cleanup)
+// @route   DELETE /api/auth/fcm-token/all
+// @access  Private
+exports.clearAllFcmTokens = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found',
+            });
+        }
+
+        const oldCount = user.fcmTokens.length;
+        user.fcmTokens = [];
+        await user.save();
+
+        console.log(`🧹 Cleared ${oldCount} FCM tokens for user ${user.name}`);
+
+        res.status(200).json({
+            success: true,
+            message: `Cleared ${oldCount} FCM tokens`,
+            tokenCount: 0,
+        });
+    } catch (err) {
+        console.error('❌ Clear FCM Tokens Error:', err);
         res.status(500).json({ 
             success: false, 
             message: 'Server error', 
