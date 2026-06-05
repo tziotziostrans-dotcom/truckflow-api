@@ -63,7 +63,7 @@ app.use(cors({
 }));
 
 // Handle preflight requests explicitly
-app.options('*', cors());
+app.options('/*', cors());
 
 // Body parser
 app.use(express.json());
