@@ -135,7 +135,6 @@ const t = (key, lang = 'en', params = {}) => {
 
   return message;
 };
-
 /**
  * Middleware to detect language from request
  */
@@ -163,7 +162,12 @@ const languageMiddleware = (req, res, next) => {
   }
 
   req.language = lang;
+  
+  // ✅ ADD THIS - Attach translate function to request
+  req.t = (key, params = {}) => {
+    return t(key, req.language, params);
+  };
+  
   next();
 };
-
 module.exports = { t, languageMiddleware };
