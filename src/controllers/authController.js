@@ -383,7 +383,11 @@ exports.updateFcmToken = async (req, res) => {
     try {
         const { token, action } = req.body; // action: 'add' or 'remove'
 
+        console.log(`📱 FCM Token ${action || 'add'} request from user:`, req.user.id);
+        console.log(`📱 Token preview:`, token ? token.substring(0, 20) + '...' : 'EMPTY');
+
         if (!token) {
+            console.error('❌ FCM token is missing in request');
             return res.status(400).json({
                 success: false,
                 message: 'Token is required',
@@ -392,20 +396,38 @@ exports.updateFcmToken = async (req, res) => {
 
         const user = await User.findById(req.user.id);
 
+        if (!user) {
+            console.error('❌ User not found:', req.user.id);
+            return res.status(404).json({
+                success: false,
+                message: 'User not found',
+            });
+        }
+
+        console.log(`📱 User ${user.name} has ${user.fcmTokens.length} existing tokens`);
+
         if (action === 'remove') {
+            const beforeCount = user.fcmTokens.length;
             user.fcmTokens = user.fcmTokens.filter(t => t !== token);
+            const afterCount = user.fcmTokens.length;
+            console.log(`📱 Removed token. Tokens: ${beforeCount} -> ${afterCount}`);
         } else {
             // Add if not already present
             if (!user.fcmTokens.includes(token)) {
                 user.fcmTokens.push(token);
+                console.log(`📱 ✅ Added new token. Total tokens: ${user.fcmTokens.length}`);
+            } else {
+                console.log(`📱 ℹ️ Token already exists, skipping duplicate`);
             }
         }
 
         await user.save();
+        console.log(`📱 ✅ FCM tokens updated successfully for user ${user.name}`);
 
         res.status(200).json({
             success: true,
             message: `FCM token ${action === 'remove' ? 'removed' : 'added'} successfully`,
+            tokenCount: user.fcmTokens.length,
         });
     } catch (err) {
         console.error('❌ Update FCM Token Error:', err);
