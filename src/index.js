@@ -80,7 +80,6 @@ const exportRoutes = require('./routes/exportRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const seedRoutes = require('./routes/seedRoutes');
-const testRoutes = require('./routes/testRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -90,7 +89,6 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/exports', exportRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/notifications', notificationRoutes);
-// app.use('/api/test', testRoutes);
 app.use('/seed', seedRoutes);
 
 // Public test endpoint to verify update
