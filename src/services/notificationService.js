@@ -69,27 +69,38 @@ try {
  */
 const sendPushToUser = async (userId, payload) => {
   try {
+    console.log(`\n📱 ========== FCM PUSH ATTEMPT ==========`);
+    console.log(`📱 User ID: ${userId}`);
+    console.log(`📱 Payload:`, JSON.stringify(payload, null, 2));
+
     if (!admin.apps.length) {
       console.warn(
-        'FCM push skipped because Firebase Admin is not initialized:',
+        '❌ FCM push skipped because Firebase Admin is not initialized:',
         userId,
       )
       return
     }
+    console.log(`✅ Firebase Admin is initialized`);
 
     const user = await User.findById(userId)
     if (!user) {
-      console.warn('FCM push skipped because user was not found:', userId)
+      console.warn('❌ FCM push skipped because user was not found:', userId)
       return
     }
+    console.log(`✅ User found: ${user.name} (${user.email})`);
+
     if (!user.fcmTokens || user.fcmTokens.length === 0) {
-      console.warn('FCM push skipped because user has no tokens:', userId)
+      console.warn(`❌ FCM push skipped because user has no tokens: ${userId}`)
+      console.warn(`   User ${user.name} needs to enable notifications!`)
       return
     }
 
     console.log(
-      `FCM push: sending to ${user.fcmTokens.length} token(s) for user ${userId}`,
+      `✅ FCM push: sending to ${user.fcmTokens.length} token(s) for user ${user.name}`,
     )
+    user.fcmTokens.forEach((token, idx) => {
+      console.log(`   Token ${idx + 1}: ${token.substring(0, 40)}...`);
+    });
 
     const message = {
       notification: {
@@ -105,13 +116,19 @@ const sendPushToUser = async (userId, payload) => {
       tokens: user.fcmTokens,
     }
 
+    console.log(`📤 Sending multicast message via Firebase Admin...`);
     const response = await admin.messaging().sendEachForMulticast(message)
+
+    console.log(`📊 FCM Response:`);
+    console.log(`   ✅ Success: ${response.successCount}`);
+    console.log(`   ❌ Failure: ${response.failureCount}`);
 
     // Clean up failed/invalid tokens
     if (response.failureCount > 0) {
       const tokensToRemove = []
       response.responses.forEach((resp, idx) => {
         if (!resp.success) {
+          console.log(`   ❌ Token ${idx + 1} failed:`, resp.error.code, resp.error.message);
           const errorCode = resp.error.code
           if (
             errorCode === 'messaging/invalid-registration-token' ||
@@ -119,6 +136,8 @@ const sendPushToUser = async (userId, payload) => {
           ) {
             tokensToRemove.push(user.fcmTokens[idx])
           }
+        } else {
+          console.log(`   ✅ Token ${idx + 1} sent successfully`);
         }
       })
 
@@ -127,14 +146,18 @@ const sendPushToUser = async (userId, payload) => {
           $pull: { fcmTokens: { $in: tokensToRemove } },
         })
         console.log(
-          `Cleaned up ${tokensToRemove.length} invalid FCM tokens for user ${userId}`,
+          `🧹 Cleaned up ${tokensToRemove.length} invalid FCM tokens for user ${userId}`,
         )
       }
+    } else {
+      console.log(`✅ All tokens sent successfully!`);
     }
 
+    console.log(`📱 ========================================\n`);
     return response
   } catch (error) {
-    console.error('Error sending push notification:', error)
+    console.error('❌ Error sending push notification:', error)
+    console.error('Error details:', error.stack);
   }
 }
 
