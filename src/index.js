@@ -38,7 +38,7 @@ setTimeout(async () => {
         console.error(`   SMTP_HOST: ${process.env.SMTP_HOST}`);
         console.error(`   SMTP_PASS set: ${!!process.env.SMTP_PASS}`);
     }
-}, 3000); // wait 3s for server to settle
+}, 3000);
 
 const app = express();
 const server = http.createServer(app);
@@ -51,29 +51,14 @@ app.use(helmet({
     crossOriginResourcePolicy: false,
 }));
 
-// Standard CORS configuration
+// Standard CORS configuration - this handles OPTIONS preflight automatically
 app.use(cors({
-
     origin: process.env.FRONTEND_URL || 'https://www.truckflowhq.com',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'ngrok-skip-browser-warning', 'Accept-Language'],
     credentials: true,
     optionsSuccessStatus: 200,
-    preflightContinue: false,
 }));
-
-// Handle preflight requests explicitly (function pattern bypasses path-to-regexp)
-app.options((req, res) => {
-    if (req.method === 'OPTIONS') {
-        res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'https://www.truckflowhq.com');
-        res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-        res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, ngrok-skip-browser-warning, Accept-Language');
-        res.header('Access-Control-Allow-Credentials', 'true');
-        res.sendStatus(200);
-    } else {
-        next();
-    }
-});
 
 // Body parser
 app.use(express.json());
@@ -106,7 +91,7 @@ app.use('/api/exports', exportRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/test', testRoutes);
-app.use('/seed', seedRoutes); // Public seed endpoint
+app.use('/seed', seedRoutes);
 
 // Public test endpoint to verify update
 app.get('/api/test', (req, res) => {
