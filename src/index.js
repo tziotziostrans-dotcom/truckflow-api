@@ -62,13 +62,17 @@ app.use(cors({
     preflightContinue: false,
 }));
 
-// Handle preflight requests explicitly (using a function to avoid path-to-regexp issues)
-app.options('*', (req, res) => {
-    res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'https://www.truckflowhq.com');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, ngrok-skip-browser-warning, Accept-Language');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.sendStatus(200);
+// Handle preflight requests explicitly (function pattern bypasses path-to-regexp)
+app.options((req, res) => {
+    if (req.method === 'OPTIONS') {
+        res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'https://www.truckflowhq.com');
+        res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+        res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, ngrok-skip-browser-warning, Accept-Language');
+        res.header('Access-Control-Allow-Credentials', 'true');
+        res.sendStatus(200);
+    } else {
+        next();
+    }
 });
 
 // Body parser
